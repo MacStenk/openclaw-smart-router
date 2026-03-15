@@ -13,6 +13,7 @@ Intelligent 3-tier model routing for OpenClaw, based on the **20-Watt Principle*
 - ✅ **Sticky follow-ups** — Short replies stay in the same tier (don't downgrade Opus to Haiku for "ok mach das")
 - ✅ **Metadata-aware** — Strips OpenClaw internal metadata before classifying
 - ✅ **Fail-safe** — If Ollama is down, defaults to Sonnet (medium tier)
+- ✅ **Manual controls** — `/router lock opus`, `/router off`, `/router on` for override
 - ✅ **Fully configurable** — Choose your own models, providers, timeouts
 
 ## Installation
@@ -128,6 +129,37 @@ With Smart Router:
 - **Ollama** running locally with a small model pulled (`ollama pull qwen2.5:3b`)
 - **Claude models** via Anthropic API (or configure your own providers)
 
+## Manual Control Commands
+
+The router can be controlled with `/router` commands in your chat:
+
+| Command | Effect |
+|---------|--------|
+| `/router lock opus` | Fix to Opus tier, skip classification |
+| `/router lock sonnet` | Fix to Sonnet tier, skip classification |
+| `/router lock haiku` | Fix to Haiku tier, skip classification |
+| `/router unlock` | Remove lock, resume automatic routing |
+| `/router off` | Disable routing entirely (use default model) |
+| `/router on` | Re-enable automatic routing |
+
+**Example:**
+
+```
+You: /router lock opus
+[smart-router] /router lock opus → state updated: {"enabled":true,"lockedModel":"claude-opus-4-6"}
+
+You: Tell me about your architecture
+[smart-router] model locked to claude-opus-4-6 via state file
+
+You: /router unlock
+[smart-router] /router unlock → state updated: {"enabled":true}
+```
+
+These commands are useful when:
+- You want to force a specific model for sensitive decisions
+- Ollama is misbehaving and you want to disable routing
+- You want to lock a conversation to one tier for consistency
+
 ## Logs
 
 Watch the router in action:
@@ -143,7 +175,26 @@ Example output:
 [smart-router] "Schreib mir eine Funktion..." → medium (ollama)
 [smart-router] "Wie sollte die Architektur..." → complex (keyword-complex)
 [smart-router] "ja mach das" → sticky-complex (5min follow-up)
+[smart-router] /router lock opus → state updated: {"enabled":true,"lockedModel":"claude-opus-4-6"}
+[smart-router] model locked to claude-opus-4-6 via state file
 ```
+
+## State File
+
+Router state persists in `~/.openclaw/extensions/smart-router/state.json`. You can also edit it manually:
+
+```json
+{
+  "enabled": true,
+  "lockedModel": "claude-opus-4-6",
+  "lockedProvider": "anthropic"
+}
+```
+
+- `enabled: false` — Router disabled (use default model)
+- `lockedModel` / `lockedProvider` — Override all routing decisions
+
+State survives gateway restarts.
 
 ## Customization
 
