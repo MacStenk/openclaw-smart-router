@@ -69,6 +69,36 @@ Add to `~/.openclaw/config.json`:
 | `timeoutMs` | `3000` | Timeout for Ollama classification |
 | `logRouting` | `true` | Log routing decisions to gateway logs |
 
+## Architecture
+
+```mermaid
+flowchart TD
+    A[User Message] --> B{/router command?}
+    B -->|yes| C[Update state.json]
+    C --> D[Skip routing]
+    B -->|no| E{State: locked/disabled?}
+    E -->|locked| F[Use locked model]
+    E -->|disabled| D
+    E -->|active| G[Strip Metadata]
+    G --> H{Layer 1: Keyword Match?}
+    H -->|simple pattern| I["HAIKU (simple)"]
+    H -->|complex pattern| J["OPUS (complex)"]
+    H -->|no match| K{Layer 2: Sticky Follow-up?}
+    K -->|yes, within 5min| L[Previous Tier]
+    K -->|no| M["Layer 3: Ollama Classify\n(qwen2.5:3b, ~600ms)"]
+    M --> N{Result}
+    N -->|simple| I
+    N -->|medium| O["SONNET (medium)"]
+    N -->|complex| J
+    M -.->|Ollama down| O
+
+    style I fill:#b2f2bb,stroke:#2f9e44
+    style O fill:#d0ebff,stroke:#1971c2
+    style J fill:#ffe3e3,stroke:#e03131
+    style M fill:#fff9db,stroke:#f08c00
+    style C fill:#fff5f5,stroke:#e03131
+```
+
 ## How It Works
 
 ### Layer 1: Fast Keyword Filters
