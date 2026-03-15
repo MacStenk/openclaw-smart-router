@@ -177,6 +177,14 @@ export default function register(api: any) {
               state.lockedProvider = alias.provider;
               state.enabled = true;
             }
+          } else if (cmd === "status") {
+            const mode = state.enabled === false
+              ? "DISABLED"
+              : state.lockedModel
+                ? `LOCKED → ${state.lockedModel}`
+                : "AUTO (3-tier routing)";
+            api.logger?.info(`[smart-router] STATUS: ${mode} | classifyModel=${classifyModel} | stickyDecay=${cfg.stickyDecayMinutes ?? 5}min | stateFile=${stateFile}`);
+            return undefined;
           }
 
           await fs.promises.writeFile(stateFile, JSON.stringify(state, null, 2));
