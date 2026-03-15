@@ -1,3 +1,6 @@
+import * as fs from "fs";
+import * as path from "path";
+
 /**
  * Smart Model Router — 20-Watt Principle (3-Tier)
  *
@@ -14,11 +17,11 @@
 // --- Fast keyword pre-filter ---
 // These patterns strongly indicate complexity (skip Ollama call)
 const OPUS_KEYWORDS =
-  /\b(strategie|strategy|vision|architektur|architecture|konzept|concept|philosophie|philosophy|grundsätzlich|fundamentally|langfristig|long.?term|world.?model|trade.?off|pro.*contra|pros.*cons|system.?design|roadmap)\b/i;
+  /\b(strategie|vision|architektur|konzept|philosophie|grundsätzlich|langfristig|world.?model|trade.?off|pro.*contra)\b/i;
 
 // These patterns strongly indicate simplicity (skip Ollama call)
 const SIMPLE_FAST =
-  /^(ja|nein|ok|danke|gut|passt|mach|guten morgen|morgen|gn8|hi|hey|jo|klar|genau|stimmt|richtig|cool|super|nice|perfekt|alles klar|bin da|logo|hallo|moin|thx|thanks|bye|tschüss|ciao|yes|no|sure|got it|yep|nope|good morning|good night|cheers|ty|thank you|sounds good|works for me|roger|ack|noted|lgtm)[\s!.]*$/i;
+  /^(ja|nein|ok|danke|gut|passt|mach|guten morgen|morgen|gn8|hi|hey|jo|klar|genau|stimmt|richtig|cool|super|nice|perfekt|alles klar|bin da|logo|hallo|moin|thx|thanks|bye|tschüss|ciao)[\s!.]*$/i;
 
 // Media/image messages need vision → Opus
 const HAS_MEDIA = /\[media attached|image data removed/i;
@@ -101,12 +104,26 @@ function extractUserMessage(prompt: string): string {
 // --- Sticky routing patterns ---
 // Short follow-up messages that should inherit the previous tier
 const FOLLOW_UP =
-  /^(ja|nein|ok|mach|mach das|genau|stimmt|richtig|und jetzt|weiter|next|dann|go|los|mach weiter|ja bitte|nein danke|ja mach|ok mach|passt|gut|klar|yes|no|sure|do it|go ahead|proceed|continue|yes please|no thanks|sounds good|let's go|yep|nope|got it)[\s!?.]*$/i;
+  /^(ja|nein|ok|mach|mach das|genau|stimmt|richtig|und jetzt|weiter|next|dann|go|los|mach weiter|ja bitte|nein danke|ja mach|ok mach|passt|gut|klar)[\s!?.]*$/i;
+
+// Model name shortcuts for /router lock commands
+const MODEL_ALIASES: Record<string, { model: string; provider: string }> = {
+  opus: { model: "claude-opus-4-6", provider: "anthropic" },
+  sonnet: { model: "claude-sonnet-4-6", provider: "anthropic" },
+  haiku: { model: "claude-haiku-4-5", provider: "anthropic" },
+};
 
 export default function register(api: any) {
   const cfg = api.config ?? {};
   const ollamaBase = cfg.ollamaBase ?? "http://localhost:11434";
-  const classifyModel = cfg.classifyModel ?? "qwen2.5:3b";
+  const classifyModel = cfg.classifyModel ?? "ministral-3:8b-cloud";
+  const stateFile = cfg.stateFile ?? path.join(
+    process.env.HOME || "/tmp",
+    ".openclaw",
+    "extensions",
+    "smart-router",
+    "state.json"
+  );
   const simpleModel = cfg.simpleModel ?? "claude-haiku-4-5";
   const simpleProvider = cfg.simpleProvider ?? "anthropic";
   const complexModel = cfg.complexModel ?? "claude-opus-4-6";
@@ -124,14 +141,6 @@ export default function register(api: any) {
     async (event: any) => {
       if (!enabled) return undefined;
 
-      // Respect manual model overrides (/model command or session-level override)
-      if (event.modelOverride || event.sessionModel || event.manualModel) {
-        if (logRouting) {
-          api.logger?.info(`[smart-router] manual override detected, skipping router`);
-        }
-        return undefined;
-      }
-
       const rawPrompt = (event.prompt || "").trim();
       if (!rawPrompt) return undefined;
 
@@ -139,12 +148,74 @@ export default function register(api: any) {
       const userMessage = extractUserMessage(rawPrompt);
       if (!userMessage) return undefined;
 
-      // Skip routing for /model commands
-      if (/^\/(model|m)\s/i.test(userMessage)) {
-        if (logRouting) {
-          api.logger?.info(`[smart-router] /model command detected, skipping router`);
+      // Handle /router commands FIRST (before state file check)
+      // so commands work even when router is disabled
+      const routerCmd = userMessage.match(/^\/router\s+(off|on|lock\s+(\w+)|unlock|status)\s*$/i);
+      if (routerCmd) {
+        const cmd = routerCmd[1].toLowerCase();
+        try {
+          let state: any = {};
+          try { state = JSON.parse(await fs.promises.readFile(stateFile, "utf-8")); } catch {}
+
+          if (cmd === "off") {
+            state.enabled = false;
+            delete state.lockedModel;
+            delete state.lockedProvider;
+          } else if (cmd === "on") {
+            state.enabled = true;
+            delete state.lockedModel;
+            delete state.lockedProvider;
+          } else if (cmd === "unlock") {
+            delete state.lockedModel;
+            delete state.lockedProvider;
+            state.enabled = true;
+          } else if (cmd.startsWith("lock")) {
+            const modelName = routerCmd[2]?.toLowerCase();
+            const alias = MODEL_ALIASES[modelName];
+            if (alias) {
+              state.lockedModel = alias.model;
+              state.lockedProvider = alias.provider;
+              state.enabled = true;
+            }
+          }
+
+          await fs.promises.writeFile(stateFile, JSON.stringify(state, null, 2));
+          if (logRouting) {
+            api.logger?.info(`[smart-router] /router ${cmd} → state updated: ${JSON.stringify(state)}`);
+          }
+        } catch (e: any) {
+          if (logRouting) {
+            api.logger?.info(`[smart-router] /router command failed: ${e.message}`);
+          }
         }
+        // Don't override model for the command message itself
         return undefined;
+      }
+
+      // Respect manual model overrides via state file
+      // Since OpenClaw's plugin API doesn't expose /model overrides on the
+      // event object, we use a local state file that can be toggled via
+      // messages like "/router off", "/router on", "/router lock opus"
+      try {
+        const stateRaw = await fs.promises.readFile(stateFile, "utf-8");
+        const state = JSON.parse(stateRaw);
+        if (state.enabled === false) {
+          if (logRouting) {
+            api.logger?.info(`[smart-router] router disabled via state file, skipping`);
+          }
+          return undefined;
+        }
+        if (state.lockedModel) {
+          if (logRouting) {
+            api.logger?.info(`[smart-router] model locked to ${state.lockedModel} via state file`);
+          }
+          return {
+            modelOverride: state.lockedModel,
+            providerOverride: state.lockedProvider || "anthropic",
+          };
+        }
+      } catch {
+        // State file doesn't exist or is invalid → router runs normally
       }
 
       // Chat ID for sticky routing (fallback to "default")
@@ -175,7 +246,7 @@ export default function register(api: any) {
         method = "keyword-fast";
       }
       // Greetings that are never follow-ups (standalone simple)
-      else if (/^(guten morgen|morgen|gn8|hi|hey|hallo|moin|bye|tschüss|ciao|thx|thanks|good morning|good night|cheers|howdy)[\s!.]*$/i.test(userMessage)) {
+      else if (/^(guten morgen|morgen|gn8|hi|hey|hallo|moin|bye|tschüss|ciao|thx|thanks)[\s!.]*$/i.test(userMessage)) {
         decision = "simple";
         method = "keyword-greeting";
       }
