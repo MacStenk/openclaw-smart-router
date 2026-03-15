@@ -1,0 +1,33 @@
+{
+  "name": "@macstenk/openclaw-smart-router",
+  "version": "1.0.0",
+  "description": "Intelligent 3-tier model routing for OpenClaw. Route simple requests to Haiku, medium to Sonnet, complex to Opus—locally classified via Ollama.",
+  "type": "module",
+  "main": "index.ts",
+  "author": "MacStenk",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MacStenk/openclaw-smart-router.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MacStenk/openclaw-smart-router/issues"
+  },
+  "homepage": "https://github.com/MacStenk/openclaw-smart-router#readme",
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "router",
+    "model-selection",
+    "ai",
+    "claude",
+    "ollama"
+  ],
+  "dependencies": {},
+  "devDependencies": {},
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "id": "smart-router",
+  "name": "Smart Router",
+  "description": "Intelligent 3-tier model routing based on message complexity. Routes simple messages to Haiku, medium to Sonnet, complex to Opus. Local Ollama-based classification with sticky follow-ups.",
+  "version": "1.0.0",
+
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "ollamaBase": {
+        "type": "string",
+        "default": "http://localhost:11434",
+        "description": "Base URL for Ollama API"
+      },
+      "classifyModel": {
+        "type": "string",
+        "default": "qwen2.5:3b",
+        "description": "Ollama model for message classification"
+      },
+      "simpleModel": {
+        "type": "string",
+        "default": "claude-haiku-4-5",
+        "description": "Model for simple/trivial messages"
+      },
+      "simpleProvider": {
+        "type": "string",
+        "default": "anthropic",
+        "description": "Provider for simple model"
+      },
+      "complexModel": {
+        "type": "string",
+        "default": "claude-opus-4-6",
+        "description": "Model for complex/strategic messages"
+      },
+      "complexProvider": {
+        "type": "string",
+        "default": "anthropic",
+        "description": "Provider for complex model"
+      },
+      "stickyDecayMinutes": {
+        "type": "number",
+        "default": 5,
+        "minimum": 1,
+        "description": "Minutes to keep follow-up context sticky before expiring"
+      },
+      "timeoutMs": {
+        "type": "number",
+        "default": 3000,
+        "minimum": 1000,
+        "description": "Timeout for Ollama classification requests"
+      },
+      "logRouting": {
+        "type": "boolean",
+        "default": true,
+        "description": "Log routing decisions to gateway logs"
+      }
+    }
+  },
+  "uiHints": {
+    "enabled": {
+      "label": "Enable Smart Router"
+    },
+    "ollamaBase": {
+      "label": "Ollama Base URL",
+      "placeholder": "http://localhost:11434"
+    },
+    "classifyModel": {
+      "label": "Classification Model",
+      "help": "Small local model used to classify message complexity"
+    },
+    "simpleModel": {
+      "label": "Simple Model",
+      "help": "Fast, cheap model for trivial requests"
+    },
+    "simpleProvider": {
+      "label": "Simple Model Provider"
+    },
+    "complexModel": {
+      "label": "Complex Model",
+      "help": "Powerful model for strategic/architectural requests"
+    },
+    "complexProvider": {
+      "label": "Complex Model Provider"
+    },
+    "stickyDecayMinutes": {
+      "label": "Sticky Context Decay (minutes)",
+      "help": "How long follow-ups stay in same tier before resetting"
+    },
+    "timeoutMs": {
+      "label": "Ollama Timeout (ms)",
+      "advanced": true
+    },
+    "logRouting": {
+      "label": "Log Routing Decisions",
+      "advanced": true
+    }
+  }
+}
