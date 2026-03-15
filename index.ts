@@ -124,12 +124,28 @@ export default function register(api: any) {
     async (event: any) => {
       if (!enabled) return undefined;
 
+      // Respect manual model overrides (/model command or session-level override)
+      if (event.modelOverride || event.sessionModel || event.manualModel) {
+        if (logRouting) {
+          api.logger?.info(`[smart-router] manual override detected, skipping router`);
+        }
+        return undefined;
+      }
+
       const rawPrompt = (event.prompt || "").trim();
       if (!rawPrompt) return undefined;
 
       // Strip metadata to get the actual user message
       const userMessage = extractUserMessage(rawPrompt);
       if (!userMessage) return undefined;
+
+      // Skip routing for /model commands
+      if (/^\/(model|m)\s/i.test(userMessage)) {
+        if (logRouting) {
+          api.logger?.info(`[smart-router] /model command detected, skipping router`);
+        }
+        return undefined;
+      }
 
       // Chat ID for sticky routing (fallback to "default")
       const chatId: string = event.chatId || event.chat_id || "default";
